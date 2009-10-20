@@ -340,6 +340,7 @@ module Paperclip
       @styles.each do |name, args|
         @styles[name][:geometry] = @styles[name][:geometry].call(instance) if @styles[name][:geometry].respond_to?(:call)
         @styles[name][:processors] = @styles[name][:processors].call(instance) if @styles[name][:processors].respond_to?(:call)
+        @styles[name][:source] = :original unless @styles[name][:source]
       end
     end
 
@@ -375,10 +376,14 @@ module Paperclip
     end
 
     def post_process_styles #:nodoc:
-      @styles.each do |name, args|
+      normalized_styles = @styles.map { |name, args| [args[:source], name] }.flatten.uniq.compact
+      normalized_styles.delete(:original)
+      normalized_styles.each do |name|
         begin
+          args = @styles[name]
           raise RuntimeError.new("Style #{name} has no processors defined.") if args[:processors].blank?
-          @queued_for_write[name] = args[:processors].inject(@queued_for_write[:original]) do |file, processor|
+          source_file = @queued_for_write[args[:source]] || @queued_for_write[:original]
+          @queued_for_write[name] = args[:processors].inject(source_file) do |file, processor|
             Paperclip.processor(processor).make(file, args, self)
           end
         rescue PaperclipError => e
